@@ -47,7 +47,7 @@ try:
     req = urllib.request.Request(url, headers={
         'User-Agent': 'Mozilla/5.0 (Windows NT 6.1; WOW64; rv:64.0) Gecko/20100101 Firefox/64.0'})
 except Exception as e:
-    print(str(e))
+    print(e)
     sys.exit()
 
 G.add_node(url)
@@ -55,8 +55,6 @@ G.add_node(url)
 
 ######It gets everything what is inside <script> tag in html code
 def getscripts(url):
-    list_of_scripts = []
-
     # get website
     try:
         oururl = urllib.request.urlopen(url, timeout=10).read()
@@ -65,11 +63,7 @@ def getscripts(url):
         sys.exit()
     soup = BeautifulSoup(oururl, 'html.parser')
 
-    # find <script> tags
-    for script in soup.findAll("script"):
-        list_of_scripts.append(script.extract())
-
-    return list_of_scripts
+    return [script.extract() for script in soup.findAll("script")]
 
 
 non_js_url = []
@@ -88,31 +82,24 @@ def getlinks(request, depth=1):
                 second_depth = re.split(r"""\"|\\|'| |\(|""", j)  # xD
                 second_depth_url = second_depth[0]  # clean url
                 parsed_url = urlparse(second_depth_url)
-                if second_depth_url not in js_url:  # check for repetitive to avoid infinite loop
-                    if '.js' in parsed_url[2] and 'github' not in parsed_url[1]:  # check if it has javascript extension
-                        if not second_depth_url.startswith(
-                                ('http://', 'https://')):  # check if url starts with http or https
-                            second_depth_url = 'https://' + second_depth_url  # if not add it
-
-                        # Magic?
-                        if depth > 1:
-                            G.add_edge(request, second_depth_url)
-                        else:
-                            G.add_edge(request, second_depth_url)
-
-                        print("----" * depth + second_depth_url)
-                        js_url.append(second_depth_url)
-                        getlinks(second_depth_url, depth=depth + 1)  # recursion
-
-                    else:
-                        if parsed_url[1].endswith(("com", "net", "org", "edu", "io")) and parsed_url[
-                            1] not in non_js_url:  # Check if url is domain indeed, and if it's unique
-                            print("----" * depth + parsed_url[1])
-                            G.add_edge(request, second_depth_url)
-                            non_js_url.append(parsed_url[1])  # append to list to avoid repetitive
-                else:
+                if second_depth_url in js_url:
                     # print ("Infinite LOOP")
                     break
+                if '.js' in parsed_url[2] and 'github' not in parsed_url[1]:  # check if it has javascript extension
+                    if not second_depth_url.startswith(
+                                ('http://', 'https://')):  # check if url starts with http or https
+                        second_depth_url = f'https://{second_depth_url}'
+
+                    G.add_edge(request, second_depth_url)
+                    print("----" * depth + second_depth_url)
+                    js_url.append(second_depth_url)
+                    getlinks(second_depth_url, depth=depth + 1)  # recursion
+
+                elif parsed_url[1].endswith(("com", "net", "org", "edu", "io")) and parsed_url[
+                            1] not in non_js_url:  # Check if url is domain indeed, and if it's unique
+                    print("----" * depth + parsed_url[1])
+                    G.add_edge(request, second_depth_url)
+                    non_js_url.append(parsed_url[1])  # append to list to avoid repetitive
             except Exception as e:
                 print("----" * depth + str(e))
 
@@ -140,8 +127,7 @@ def extractscripts(list_of_scripts):
             src = 0
 
         if not src: #If there is not 'src' attribute
-            links = re.findall(regex1, str(i))  # Find all links from javascript code
-            if links:
+            if links := re.findall(regex1, str(i)):
                 for j in links:
                     if '.js' in j:
                         clean_link = re.split(r"""\"|\\|'| |\(|""", j)  # hehe
@@ -152,10 +138,10 @@ def extractscripts(list_of_scripts):
 scripts = getscripts(url) #Get all scripts
 extracted_scripts = extractscripts(scripts)  # Extract 'src' from script and look for url directly inside of the script
 
-print("-------------------- " + url + " -----------------------")
+print(f"-------------------- {url} -----------------------")
 for script in extracted_scripts:  # add http or https
     if not script.startswith(('http://', 'https://')):
-        script = 'https://' + script
+        script = f'https://{script}'
 
     print(script)
     G.add_edge(url, script)
@@ -163,6 +149,6 @@ for script in extracted_scripts:  # add http or https
 
 nx.draw(G, with_labels=True)
 plt.savefig("simple_path.png")  # save as png
-nx.write_gexf(G, parsed_arg[1] + ".gexf")
-print("Saved as " + parsed_arg[1] + ".gexf")
+nx.write_gexf(G, f"{parsed_arg[1]}.gexf")
+print(f"Saved as {parsed_arg[1]}.gexf")
 plt.show()  # display
